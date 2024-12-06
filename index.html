@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Using @teselagen/bio-parsers with Modules</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .file-upload {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .file-upload label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .file-upload input[type="file"] {
+            display: block;
+            margin-bottom: 10px;
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .result-container {
+            margin-top: 10px;
+        }
+
+        .error-message {
+            color: #d32f2f;
+            font-size: 0.9em;
+        }
+
+        #comparison-result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div style="text-align: center;">
+        <h1>Comparing two sequences with Seguid</h1>
+        <p>This web application uses <a href="https://www.seguid.org/">Seguid</a> to compare two sequences.</p>
+        <p>Simply upload two files and see if they are identical. The seguid is different for circular and linear
+            sequences,
+            so double-check the topology!</p>
+        <p>Built by <a href="https://github.com/manulera">Manuel Lera Ramirez</a>, source code available on <a
+                href="https://github.com/manulera/seguid-compare">GitHub</a>.</p>
+    </div>
+    <div class="file-upload">
+        <label for="file1">Upload File 1:</label>
+        <input type="file" id="file1" name="file1">
+        <div id="file1-result" class="result-container"></div>
+        <div id="file1-error" class="error-message"></div>
+    </div>
+    <div class="file-upload">
+        <label for="file2">Upload File 2:</label>
+        <input type="file" id="file2" name="file2">
+        <div id="file2-result" class="result-container"></div>
+        <div id="file2-error" class="error-message"></div>
+    </div>
+    <div id="comparison-result"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/seguid/seguid.js"></script>
+    <script type="module">
+        import * as bioParsers from 'https://cdn.jsdelivr.net/npm/@teselagen/bio-parsers/index.js';
+        // Access the seguid functions from the global window object
+        // since it's loaded as a regular script
+
+        function handleFileChange(fileNumber) {
+            return async function () {
+                console.log('File changed:', fileNumber);
+                const file = this.files[0];
+                document.getElementById(`file${fileNumber}-result`).textContent = '';
+                document.getElementById(`file${fileNumber}-error`).textContent = '';
+                document.getElementById('comparison-result').textContent = '';
+                if (file) {
+                    try {
+                        const fileName = file.name.toLowerCase();
+                        let result;
+                        if (fileName.endsWith('.gb') || fileName.endsWith('.gbk') || fileName.endsWith('.ape')) {
+                            result = bioParsers.genbankToJson(await file.text());
+                        } else if (fileName.endsWith('.fasta') || fileName.endsWith('.fa')) {
+                            result = bioParsers.fastaToJson(await file.text());
+                        } else if (fileName.endsWith('.dna')) {
+                            result = await bioParsers.snapgeneToJson(file);
+                        } else {
+                            throw new Error('File must have .gb, .gbk, .ape, .fasta, or .fa extension');
+                        }
+                        console.log(`File ${fileNumber} Parsed Result:`, result);
+                        const seq = result[0].parsedSequence.sequence.toUpperCase();
+                        const circular = result[0].parsedSequence.circular;
+                        const topology = circular ? 'circular' : 'linear';
+                        const seguid = await (circular ? csseguid(seq) : lsseguid(seq));
+                        document.getElementById(`file${fileNumber}-result`).innerHTML = `<div>Topology: ${topology}</div><div id="file${fileNumber}-seguid">${seguid}</div>`;
+
+                        // After processing each file, check if both seguids are available
+                        const otherFileNumber = fileNumber === 1 ? 2 : 1;
+                        const otherSeguidElement = document.getElementById(`file${otherFileNumber}-seguid`);
+                        if (otherSeguidElement && otherSeguidElement.textContent) {
+                            const currentSeguid = seguid;
+                            const otherSeguid = otherSeguidElement.textContent;
+                            const areEqual = currentSeguid === otherSeguid;
+                            document.getElementById('comparison-result').innerHTML +=
+                                `<div>Sequences ${areEqual ? 'are identical' : 'are different'}</div>`;
+                        }
+
+                    } catch (error) {
+                        document.getElementById(`file${fileNumber}-error`).textContent = 'Error parsing file';
+                    }
+                }
+            }
+        }
+
+        document.getElementById('file1').onchange = handleFileChange(1);
+        document.getElementById('file2').onchange = handleFileChange(2);
+
+    </script>
+</body>
+
+</html>
